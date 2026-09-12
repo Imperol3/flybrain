@@ -67,42 +67,51 @@
   const renderer = new THREE.WebGLRenderer({antialias:true});
   renderer.setSize(innerWidth,innerHeight); renderer.setPixelRatio(Math.min(devicePixelRatio,2));
   renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
-  renderer.outputEncoding=THREE.sRGBEncoding; renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.15;
+  renderer.outputEncoding=THREE.sRGBEncoding; renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=.92;
   stage.appendChild(renderer.domElement);
 
-  scene.add(new THREE.HemisphereLight(0xb8d9ea,0x151006,1.35));
-  const key=new THREE.DirectionalLight(0xffffff,2.2); key.position.set(-10,18,8); key.castShadow=true; key.shadow.mapSize.set(2048,2048); scene.add(key);
-  const rim=new THREE.PointLight(0x4fd1e8,2.3,35); rim.position.set(10,7,-8); scene.add(rim);
+  scene.add(new THREE.HemisphereLight(0xaac7d6,0x130c07,.72));
+  const key=new THREE.DirectionalLight(0xffe8c9,1.35); key.position.set(-10,18,8); key.castShadow=true; key.shadow.mapSize.set(2048,2048); scene.add(key);
+  const rim=new THREE.PointLight(0x4fd1e8,1.4,35); rim.position.set(10,7,-8); scene.add(rim);
+  const fill=new THREE.PointLight(0xff6e42,.65,22);fill.position.set(-8,4,4);scene.add(fill);
 
-  const floor=new THREE.Mesh(new THREE.PlaneGeometry(70,70),new THREE.MeshStandardMaterial({color:0x11171b,roughness:.92,metalness:.05}));
+  const floor=new THREE.Mesh(new THREE.PlaneGeometry(48,48),new THREE.MeshStandardMaterial({color:0x101619,roughness:.96,metalness:.02}));
   floor.rotation.x=-Math.PI/2; floor.receiveShadow=true; scene.add(floor);
-  const grid=new THREE.GridHelper(70,70,0x263640,0x182128); grid.position.y=.012; scene.add(grid);
+  const grid=new THREE.GridHelper(48,24,0x31515b,0x1a292f); grid.position.y=.012;grid.material.transparent=true;grid.material.opacity=.22;scene.add(grid);
 
-  const boxMat=new THREE.MeshPhysicalMaterial({color:0x47606e,transparent:true,opacity:.08,roughness:.25,side:THREE.DoubleSide});
+  const boxMat=new THREE.MeshPhysicalMaterial({color:0x456573,transparent:true,opacity:.055,roughness:.18,side:THREE.DoubleSide,depthWrite:false});
   const wallGeo=new THREE.PlaneGeometry(24,8); const walls=[];
   function wall(x,y,z,ry){const w=new THREE.Mesh(wallGeo,boxMat);w.position.set(x,y,z);w.rotation.y=ry;scene.add(w);walls.push(w)}
-  wall(0,4,-12,0);wall(-12,4,0,Math.PI/2);wall(12,4,0,-Math.PI/2);
-  const exitL=new THREE.Mesh(new THREE.BoxGeometry(8,.18,.2),new THREE.MeshBasicMaterial({color:0x58d68d}));exitL.position.set(0,.1,12);scene.add(exitL);
+  wall(0,4,12,0);wall(-12,4,0,Math.PI/2);wall(12,4,0,-Math.PI/2);
+  const frameMat=new THREE.MeshStandardMaterial({color:0x2e8b67,emissive:0x0d3829,roughness:.45});
+  function framePiece(x,y,z,sx,sy,sz){const p=new THREE.Mesh(new THREE.BoxGeometry(sx,sy,sz),frameMat);p.position.set(x,y,z);p.castShadow=true;scene.add(p)}
+  framePiece(-4,2,-12,.22,4,.24);framePiece(4,2,-12,.22,4,.24);framePiece(0,4,-12,8.2,.22,.24);
+  const exitL=new THREE.Mesh(new THREE.PlaneGeometry(8,3.8),new THREE.MeshBasicMaterial({color:0x58d68d,transparent:true,opacity:.055,side:THREE.DoubleSide}));exitL.position.set(0,2,-12);scene.add(exitL);
 
   const MAT={
-    body:new THREE.MeshPhysicalMaterial({color:0x2d231b,roughness:.58,metalness:.03,clearcoat:.2}),
-    abdomen:new THREE.MeshPhysicalMaterial({color:0x35291d,roughness:.62}),
-    joint:new THREE.MeshStandardMaterial({color:0x17130f,roughness:.7}),
-    eye:new THREE.MeshPhysicalMaterial({color:0x7e1830,roughness:.32,clearcoat:.75}),
-    wing:new THREE.MeshPhysicalMaterial({color:0xbad9de,transparent:true,opacity:.4,roughness:.18,side:THREE.DoubleSide,depthWrite:false}),
+    body:new THREE.MeshPhysicalMaterial({color:0x6f421d,roughness:.72,metalness:.01,clearcoat:.08}),
+    abdomen:new THREE.MeshPhysicalMaterial({color:0x24150c,roughness:.78}),
+    band:new THREE.MeshStandardMaterial({color:0x090706,roughness:.85}),
+    joint:new THREE.MeshStandardMaterial({color:0x130d09,roughness:.82}),
+    eye:new THREE.MeshPhysicalMaterial({color:0x790c22,roughness:.48,clearcoat:.28,flatShading:true}),
+    wing:new THREE.MeshPhysicalMaterial({color:0xc8e8e7,transparent:true,opacity:.28,roughness:.12,side:THREE.DoubleSide,depthWrite:false}),
+    vein:new THREE.LineBasicMaterial({color:0x704e37,transparent:true,opacity:.48}),
     brain:new THREE.MeshBasicMaterial({color:0x4fd1e8,transparent:true,opacity:.72,wireframe:true}),
     glow:new THREE.MeshBasicMaterial({color:0x4fd1e8,transparent:true,opacity:.12,side:THREE.BackSide})
   };
-  const fly=new THREE.Group(); fly.position.set(0,1.25,4); scene.add(fly);
-  const body=new THREE.Group(); body.rotation.y=Math.PI; fly.add(body); // local nose points toward -Z
+  const fly=new THREE.Group(); fly.position.set(0,1.25,4); fly.scale.setScalar(.92); scene.add(fly);
+  const body=new THREE.Group(); fly.add(body); // local nose and forward motion both point toward -Z
   function ellipsoid(name,r,scale,pos,mat,segments=32){const m=new THREE.Mesh(new THREE.SphereGeometry(r,segments,Math.max(12,segments/2)),mat);m.name=name;m.scale.set(...scale);m.position.set(...pos);m.castShadow=true;m.receiveShadow=true;body.add(m);return m}
-  const thorax=ellipsoid('thorax',1,[1.2,1,1.38],[0,0,0],MAT.body);
-  const abdomen=ellipsoid('abdomen',1,[.95,.72,2.05],[0,-.05,2.45],MAT.abdomen);
-  const head=ellipsoid('head',1,[1.08,.95,.92],[0,.1,-1.75],MAT.body);
-  ellipsoid('eyeL',.62,[.6,.92,.7],[-.82,.18,-1.98],MAT.eye,24); ellipsoid('eyeR',.62,[.6,.92,.7],[.82,.18,-1.98],MAT.eye,24);
+  const thorax=ellipsoid('thorax',1,[1.15,.98,1.28],[0,0,0],MAT.body);
+  const abdomen=ellipsoid('abdomen',1,[.88,.68,2.15],[0,-.08,2.42],MAT.abdomen);
+  const head=ellipsoid('head',1,[1.0,.88,.82],[0,.08,-1.65],MAT.body);
+  ellipsoid('eyeL',.64,[.62,.92,.72],[-.78,.17,-1.86],MAT.eye,12); ellipsoid('eyeR',.64,[.62,.92,.72],[.78,.17,-1.86],MAT.eye,12);
+  [-.46,0,.46].forEach((x,i)=>ellipsoid('ocellus'+i,.075,[1,1,.65],[x*.42,.82,-2.02],new THREE.MeshBasicMaterial({color:0xffb12b}),10));
+  const dorsal=ellipsoid('dorsalMark',.66,[.62,.18,1.25],[0,.86,.05],MAT.band,20);dorsal.rotation.x=.08;
+  [1.15,1.82,2.48,3.08,3.56].forEach((z,i)=>{const radius=.79-i*.075;const band=new THREE.Mesh(new THREE.TorusGeometry(radius,.055,8,32),MAT.band);band.scale.y=.72;band.position.set(0,-.08,z);body.add(band)});
 
-  const brain=ellipsoid('brain',.7,[.8,.55,.58],[0,.18,-1.68],MAT.brain,20);
-  const brainGlow=ellipsoid('brainGlow',.75,[.9,.65,.68],[0,.18,-1.68],MAT.glow,20);
+  const brain=ellipsoid('brain',.64,[.82,.55,.58],[0,.17,-1.62],MAT.brain,20);
+  const brainGlow=ellipsoid('brainGlow',.7,[.9,.65,.68],[0,.17,-1.62],MAT.glow,20);
 
   function cylinderBetween(a,b,r,mat,parent=body){const d=new THREE.Vector3().subVectors(b,a),mid=new THREE.Vector3().addVectors(a,b).multiplyScalar(.5);const m=new THREE.Mesh(new THREE.CylinderGeometry(r,r*.72,d.length(),9),mat);m.position.copy(mid);m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),d.clone().normalize());m.castShadow=true;parent.add(m);return m}
   // Antennae and aristae
@@ -110,21 +119,28 @@
   cylinderBetween(new THREE.Vector3(0,-.45,-2.48),new THREE.Vector3(0,-.72,-3.0),.075,MAT.joint);
 
   const wingPivots=[];
-  function makeWing(side){const pivot=new THREE.Group();pivot.position.set(side*.62,.56,.35);body.add(pivot);const shape=new THREE.Shape();shape.moveTo(0,0);shape.bezierCurveTo(side*1.2,.2,side*2.5,.45,side*3.7,.05);shape.bezierCurveTo(side*3.2,-.55,side*1.7,-.9,0,0);const wing=new THREE.Mesh(new THREE.ShapeGeometry(shape,20),MAT.wing);wing.rotation.x=-Math.PI/2;wing.castShadow=true;pivot.add(wing);wingPivots.push(pivot);return pivot}
+  function makeWing(side){const pivot=new THREE.Group();pivot.position.set(side*.56,.62,.28);pivot.rotation.z=side*.14;body.add(pivot);const shape=new THREE.Shape();shape.moveTo(0,0);shape.bezierCurveTo(side*1.1,.18,side*2.9,.35,side*4.25,.22);shape.bezierCurveTo(side*4.05,-.55,side*2.3,-1.15,0,0);const wing=new THREE.Mesh(new THREE.ShapeGeometry(shape,26),MAT.wing);wing.rotation.x=-Math.PI/2;wing.castShadow=true;pivot.add(wing);
+    const veins=[[[0,0],[side*3.75,-.1]],[[side*.6,-.12],[side*2.9,-.65]],[[side*1.45,-.22],[side*2.25,-.88]],[[side*2.2,-.13],[side*3.5,-.38]]];veins.forEach(v=>{const g=new THREE.BufferGeometry().setFromPoints(v.map(p=>new THREE.Vector3(p[0],p[1],.008)));const line=new THREE.Line(g,MAT.vein);line.rotation.x=-Math.PI/2;pivot.add(line)});wingPivots.push(pivot);return pivot}
   makeWing(-1);makeWing(1);
 
   const legPivots=[];
-  function makeLeg(side,z,phase){const hip=new THREE.Group();hip.position.set(side*.72,-.5,z);body.add(hip);const knee=new THREE.Vector3(side*1.15,-.72,(z<0?z-.55:z+.25));const foot=new THREE.Vector3(side*1.8,-1.22,(z<0?z-1:z+1.25));cylinderBetween(new THREE.Vector3(0,0,0),knee.clone().sub(hip.position),.07,MAT.joint,hip);cylinderBetween(knee.clone().sub(hip.position),foot.clone().sub(hip.position),.045,MAT.joint,hip);legPivots.push({hip,side,phase})}
-  [-1,1].forEach(side=>{makeLeg(side,-.55,0);makeLeg(side,.15,2.1);makeLeg(side,.75,4.2)});
+  function makeLeg(side,z,phase){const hip=new THREE.Group();hip.position.set(side*.7,-.42,z);body.add(hip);const a=new THREE.Vector3(0,0,0),knee=new THREE.Vector3(side*.72,-.32,z<0?-.5:.18),ankle=new THREE.Vector3(side*1.18,-.92,z<0?-1.05:.9),foot=new THREE.Vector3(side*1.55,-1.08,z<0?-1.38:1.3);cylinderBetween(a,knee,.055,MAT.joint,hip);cylinderBetween(knee,ankle,.04,MAT.joint,hip);cylinderBetween(ankle,foot,.025,MAT.joint,hip);legPivots.push({hip,side,phase})}
+  [-1,1].forEach(side=>{makeLeg(side,-.58,0);makeLeg(side,.05,2.1);makeLeg(side,.62,4.2);ellipsoid('haltere',.14,[1,.85,1],[side*.92,.35,.95],MAT.body,12)});
+  // Fine dorsal bristles help the silhouette read as an insect instead of smooth toy geometry.
+  [[-.45,.7,-.4],[.45,.7,-.4],[-.5,.72,.25],[.5,.72,.25],[-.38,.52,1.35],[.38,.52,1.35]].forEach((p,i)=>cylinderBetween(new THREE.Vector3(...p),new THREE.Vector3(p[0]+(i%2? .12:-.12),p[1]+.48,p[2]-.08),.018,MAT.joint));
 
   const threat=new THREE.Group(); scene.add(threat);
-  const threatCore=new THREE.Mesh(new THREE.SphereGeometry(.75,28,18),new THREE.MeshPhysicalMaterial({color:0xe8edf0,roughness:.35,emissive:0x2a3035}));threatCore.castShadow=true;threat.add(threatCore);
+  const threatCore=new THREE.Mesh(new THREE.SphereGeometry(.75,28,18),new THREE.MeshPhysicalMaterial({color:0x11161a,roughness:.3,emissive:0x030405}));threatCore.castShadow=true;threat.add(threatCore);
   const threatRing=new THREE.Mesh(new THREE.TorusGeometry(1.05,.035,8,64),new THREE.MeshBasicMaterial({color:0xff4d6d,transparent:true,opacity:.7}));threatRing.rotation.x=Math.PI/2;threat.add(threatRing);
 
   const shadow=new THREE.Mesh(new THREE.CircleGeometry(1.45,40),new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:.35,depthWrite:false}));shadow.rotation.x=-Math.PI/2;shadow.position.y=.025;scene.add(shadow);
 
+  const trailPositions=new Float32Array(900);const trailGeo=new THREE.BufferGeometry();trailGeo.setAttribute('position',new THREE.BufferAttribute(trailPositions,3));trailGeo.setDrawRange(0,0);const trail=new THREE.Line(trailGeo,new THREE.LineBasicMaterial({color:0x4fd1e8,transparent:true,opacity:.62}));scene.add(trail);let trailCount=0;
+  function resetTrail(){trailCount=0;trailGeo.setDrawRange(0,0);trailGeo.attributes.position.needsUpdate=true}
+  function addTrailPoint(){if(trailCount>=300)return;const i=trailCount*3;trailPositions[i]=fly.position.x;trailPositions[i+1]=.05;trailPositions[i+2]=fly.position.z;trailCount++;trailGeo.setDrawRange(0,trailCount);trailGeo.attributes.position.needsUpdate=true}
+
   const state={playing:false,progress:0,duration:4.5,last:performance.now(),heading:0,position:new THREE.Vector3(0,1.25,4),result:null,orbit:.45};
-  function resetFly(){state.playing=false;state.progress=0;state.heading=0;state.position.set(0,1.25,4);fly.position.copy(state.position);fly.rotation.y=0;document.getElementById('progress').style.width='0%';document.getElementById('behaviour').textContent='IDLE';document.getElementById('play').textContent='▶'}
+  function resetFly(){state.playing=false;state.progress=0;state.heading=0;state.position.set(0,1.25,4);fly.position.copy(state.position);fly.rotation.y=0;resetTrail();addTrailPoint();document.getElementById('progress').style.width='0%';document.getElementById('behaviour').textContent='IDLE';document.getElementById('play').textContent='▶'}
 
   function setThreat(){const az=Number(document.getElementById('azimuth').value)*Math.PI/180;const distance=13;threat.position.set(Math.sin(az)*distance,2.3,fly.position.z-Math.cos(az)*distance)}
   setThreat();
@@ -132,7 +148,7 @@
   function neuralBehaviour(p,dt){if(!state.result)return;const result=state.result;const trigger=result.escape_trigger_time_ms==null?.42:Math.min(.7,result.escape_trigger_time_ms/result.simulation_duration_ms);const lat=result.lateralized||{};const signal=Number(lat.steering_signal_hz||0);const capped=THREE.MathUtils.clamp(signal/130,-1,1);let speed=0,turnRate=0,jump=0,behaviour='ASSESSING';
     if(p>.12){turnRate=capped*1.25;if(Math.abs(capped)>.08)behaviour=capped>0?'TURNING LEFT':'TURNING RIGHT'}
     if(result.escape_triggered&&p>trigger){const q=(p-trigger)/(1-trigger);speed=5+10*Math.min(1,q*2.5);jump=Math.sin(Math.min(1,q*1.8)*Math.PI)*2.7;behaviour=q<.45?'TAKEOFF':'ESCAPING'}
-    state.heading+=turnRate*dt;state.position.x+=Math.sin(state.heading)*speed*dt;state.position.z-=Math.cos(state.heading)*speed*dt;fly.position.set(state.position.x,1.25+jump,state.position.z);fly.rotation.y=state.heading;
+    state.heading+=turnRate*dt;state.position.x-=Math.sin(state.heading)*speed*dt;state.position.z-=Math.cos(state.heading)*speed*dt;fly.position.set(state.position.x,1.25+jump,state.position.z);fly.rotation.y=state.heading;if(trailCount===0||p*300-trailCount>1)addTrailPoint();
     const stride=performance.now()*.016*(speed>0?2.8:.35);legPivots.forEach(o=>o.hip.rotation.x=Math.sin(stride+o.phase)*(.1+speed*.02));const flap=speed>0?Math.sin(performance.now()*.09)*.8:Math.sin(performance.now()*.008)*.04;wingPivots[0].rotation.z=flap;wingPivots[1].rotation.z=-flap;
     document.getElementById('behaviour').textContent=behaviour;document.getElementById('readout').textContent=`x ${state.position.x.toFixed(1)} · z ${state.position.z.toFixed(1)} · heading ${(state.heading*180/Math.PI).toFixed(0)}°`;
   }
@@ -151,7 +167,7 @@
   document.getElementById('run').onclick=runBrain;document.getElementById('reset').onclick=resetFly;document.getElementById('azimuth').onchange=setThreat;document.getElementById('brainToggle').onchange=e=>{brain.visible=brainGlow.visible=e.target.checked};document.getElementById('play').onclick=()=>{if(!state.result)return;state.playing=!state.playing;state.last=performance.now();document.getElementById('play').textContent=state.playing?'❚❚':'▶'};
   addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
 
-  function updateCamera(){const mode=document.getElementById('cameraMode').value,target=fly.position.clone();if(mode==='top'){camera.position.lerp(new THREE.Vector3(target.x,24,target.z+1),.08);camera.lookAt(target)}else if(mode==='eye'){const forward=new THREE.Vector3(Math.sin(state.heading),0,-Math.cos(state.heading));camera.position.copy(target).add(new THREE.Vector3(0,.65,0)).add(forward.clone().multiplyScalar(1.5));camera.lookAt(camera.position.clone().add(forward.multiplyScalar(8)))}else if(mode==='chase'){const behind=new THREE.Vector3(-Math.sin(state.heading)*9,5,Math.cos(state.heading)*9);camera.position.lerp(target.clone().add(behind),.06);camera.lookAt(target)}else{const offset=new THREE.Vector3(Math.sin(state.orbit)*13,7,Math.cos(state.orbit)*13);camera.position.lerp(target.clone().add(offset),.06);camera.lookAt(target)}}
+  function updateCamera(){const mode=document.getElementById('cameraMode').value,target=fly.position.clone();target.y+=.25;if(mode==='top'){camera.position.lerp(new THREE.Vector3(target.x,20,target.z+1),.08);camera.lookAt(target)}else if(mode==='eye'){const forward=new THREE.Vector3(-Math.sin(state.heading),0,-Math.cos(state.heading));camera.position.copy(target).add(new THREE.Vector3(0,.38,0)).add(forward.clone().multiplyScalar(1.25));camera.lookAt(camera.position.clone().add(forward.multiplyScalar(8)))}else if(mode==='chase'){const behind=new THREE.Vector3(Math.sin(state.heading)*7.5,3.8,Math.cos(state.heading)*7.5);camera.position.lerp(target.clone().add(behind),.07);camera.lookAt(target)}else{const offset=new THREE.Vector3(Math.sin(state.orbit)*10.5,5.6,Math.cos(state.orbit)*10.5);camera.position.lerp(target.clone().add(offset),.07);camera.lookAt(target)}}
   function animate(now){requestAnimationFrame(animate);const dt=Math.min(.05,(now-state.last)/1000);state.last=now;if(state.playing&&state.result){state.progress=Math.min(1,state.progress+dt/state.duration);neuralBehaviour(state.progress,dt);document.getElementById('progress').style.width=(state.progress*100)+'%';if(state.progress>=1){state.playing=false;document.getElementById('play').textContent='▶'}}else{const idle=now*.002;fly.position.y=state.position.y+Math.sin(idle)*.025;wingPivots[0].rotation.z=Math.sin(idle)*.025;wingPivots[1].rotation.z=-Math.sin(idle)*.025;legPivots.forEach(o=>o.hip.rotation.x=Math.sin(idle+o.phase)*.04)}
     brain.rotation.y+=dt*.7;brain.material.opacity=.55+Math.sin(now*.004)*.17;shadow.position.set(fly.position.x,.025,fly.position.z);shadow.scale.setScalar(THREE.MathUtils.clamp(1.3-(fly.position.y-1.25)*.14,.55,1.3));updateCamera();renderer.render(scene,camera)}
   resetFly();health();requestAnimationFrame(animate);
