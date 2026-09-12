@@ -21,14 +21,16 @@ run-ledger-protected scripts, not from this API.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
+from uuid import uuid4
 from pathlib import Path
 from typing import Literal
 
 import numpy as np
 import scipy.sparse as sp
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -38,14 +40,14 @@ from brain import provenance
 from brain.connectivity import loaders
 from brain.neurons import registry as registry_module
 from brain.sensory import looming
-from simulation import reporting, session
+from simulation import closed_loop, reporting, session
 
 app = FastAPI(title="Fly Brain Lab — Live API")
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 UI_SESSION_LOG = config.METADATA_DIR / "ui_session_log.jsonl"
 
-_state: dict = {"registry": None, "connectome": None, "positions": None}
+_state: dict = {"registry": None, "connectome": None, "positions": None, "closed_loop_sessions": {}}
 
 
 def _load_backend():
@@ -83,7 +85,7 @@ def _extract_positions(flywire_dir: Path, registry) -> dict:
     )
     centroid = coords.groupby("root_id")[["x", "y", "z"]].mean().reset_index()
 
-    pop_root_ids = {name: set(registry.population_root_ids(name)) for name in ("LC4", "LPLC2", "DNp01")}
+    pop_root_ids = {name: set(registry.population_root_ids(name)) for name in ("LC4", "LPLC2", "DNp01", "DNa02")}
     all_named = set().union(*pop_root_ids.values())
 
     populations = {}
@@ -128,6 +130,18 @@ def startup():
         print(f"WARNING: {flywire_dir} not found — /api/positions will be unavailable.")
 
 
+class ClosedLoopStartRequest(BaseModel):
+    azimuth_deg: float = Field(default=45.0, ge=-180.0, le=180.0)
+    initial_distance_cm: float = Field(default=20.0, gt=0.0, le=200.0)
+    approach_velocity_cm_s: float = Field(default=40.0, ge=0.0, le=250.0)
+    object_radius_cm: float = Field(default=1.0, gt=0.0, le=10.0)
+    step_ms: float = Field(default=25.0, ge=5.0, le=100.0)
+    maximum_duration_ms: float = Field(default=3000.0, ge=100.0, le=30000.0)
+    gain_mV_per_unit: float = Field(default=16.0, gt=0.0, le=500.0)
+    silenced_populations: list[str] = Field(default_factory=list)
+    seed: int = 12345
+
+
 class SimulateRequest(BaseModel):
     condition: Literal["looming", "receding", "static"] = "looming"
     approach_velocity_cm_s: float | None = Field(
@@ -164,7 +178,7 @@ def health():
         "status": "ok",
         "dataset_version": registry.dataset_version,
         "n_neurons": registry.n_neurons,
-        "populations": {name: len(registry.population_root_ids(name)) for name in ("LC4", "LPLC2", "DNp01")},
+        "populations": {name: len(registry.population_root_ids(name)) for name in ("LC4", "LPLC2", "DNp01", "DNa02")},
         "positions_available": _state["positions"] is not None,
     }
 
@@ -220,10 +234,84 @@ def simulate(req: SimulateRequest):
     return condition_dict
 
 
+@app.post("/api/closed-loop/sessions")
+def start_closed_loop(req: ClosedLoopStartRequest):
+    registry, connectome = _state["registry"], _state["connectome"]
+    if registry is None:
+        raise HTTPException(503, "Backend not loaded")
+    unknown = set(req.silenced_populations) - set(registry.populations)
+    if unknown:
+        raise HTTPException(400, f"Unknown population(s): {sorted(unknown)}")
+
+    body = closed_loop.BodyState()
+    threat = closed_loop.threat_from_azimuth(
+        body,
+        azimuth_deg=req.azimuth_deg,
+        distance_cm=req.initial_distance_cm,
+        radius_cm=req.object_radius_cm,
+        approach_velocity_cm_s=req.approach_velocity_cm_s,
+    )
+    loop = closed_loop.ClosedLoopSession(
+        registry=registry,
+        connectome=connectome,
+        body=body,
+        threat=threat,
+        step_ms=req.step_ms,
+        maximum_duration_ms=req.maximum_duration_ms,
+        gain_mV_per_unit=req.gain_mV_per_unit,
+        silenced_populations=tuple(req.silenced_populations),
+        seed=req.seed,
+    )
+    session_id = uuid4().hex
+    sessions = _state["closed_loop_sessions"]
+    if len(sessions) >= 16:
+        sessions.pop(next(iter(sessions)))
+    sessions[session_id] = loop
+    return {"session_id": session_id, "state": loop.snapshot()}
+
+
+def _get_closed_loop(session_id: str):
+    loop = _state["closed_loop_sessions"].get(session_id)
+    if loop is None:
+        raise HTTPException(404, "Closed-loop session not found or expired")
+    return loop
+
+
+@app.post("/api/closed-loop/sessions/{session_id}/step")
+def step_closed_loop(session_id: str):
+    return _get_closed_loop(session_id).step()
+
+
+@app.websocket("/api/closed-loop/sessions/{session_id}/stream")
+async def stream_closed_loop(websocket: WebSocket, session_id: str):
+    await websocket.accept()
+    loop = _state["closed_loop_sessions"].get(session_id)
+    if loop is None:
+        await websocket.send_json({"error": "Closed-loop session not found or expired"})
+        await websocket.close(code=4404)
+        return
+    try:
+        while not loop.done:
+            frame = await asyncio.to_thread(loop.step)
+            await websocket.send_json(frame)
+            await asyncio.sleep(0)
+    except WebSocketDisconnect:
+        return
+    finally:
+        if loop.done:
+            _state["closed_loop_sessions"].pop(session_id, None)
+
+
+@app.get("/fly-v1")
+def embodied_fly_v1():
+    """Original single-run embodied playback viewer."""
+    return FileResponse(str(STATIC_DIR / "fly.html"))
+
+
 @app.get("/fly")
 def embodied_fly():
-    """Embodied playback: full 3D fly driven by DNa02/DNp01 readouts."""
-    return FileResponse(str(STATIC_DIR / "fly.html"))
+    """Viewer V2: persistent brain state in an embodied closed loop."""
+    return FileResponse(str(STATIC_DIR / "viewer-v2.html"))
 
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
