@@ -1,0 +1,468 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Fly Brain Lab — Live Connectome</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --bg:#05070a; --panel:#11151d; --panel-2:#161b25; --border:#242c3a;
+    --text:#e8ecf1; --text-dim:#7d8898; --text-faint:#4c5566;
+    --lc4:#4fd1e8; --lplc2:#f5a623; --dnp01:#ff4d6d; --bg-dot:#5a6478; --accent:#4fd1e8;
+    --ok:#39d98a; --warn:#f5a623;
+    --font-ui:'IBM Plex Sans',-apple-system,BlinkMacSystemFont,sans-serif;
+    --font-mono:'IBM Plex Mono',ui-monospace,'SF Mono',monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:var(--font-ui);overflow:hidden;height:100vh;width:100vw;position:relative;}
+  #canvas-wrap{position:absolute;inset:0;}
+  canvas{display:block;touch-action:none;cursor:grab;}
+  canvas:active{cursor:grabbing;}
+
+  #topbar{
+    position:absolute;top:0;left:0;right:0;padding:20px 26px 14px;
+    display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none;
+    background:linear-gradient(to bottom, rgba(5,7,10,0.92), rgba(5,7,10,0));
+    backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+  }
+  #topbar h1{font-size:16px;font-weight:600;margin:0 0 4px;display:flex;align-items:center;gap:10px;}
+  #live-badge{
+    font-family:var(--font-mono);font-size:9px;letter-spacing:0.06em;color:var(--ok);
+    border:1px solid var(--ok);border-radius:3px;padding:2px 6px;
+  }
+  #live-badge.down{color:var(--dnp01);border-color:var(--dnp01);}
+  #topbar .sub{font-size:12px;color:var(--text-dim);max-width:480px;line-height:1.5;}
+  #stats{text-align:right;font-family:var(--font-mono);font-size:11px;color:var(--text-faint);line-height:1.7;}
+  #stats span{color:var(--text-dim);}
+
+  #legend{position:absolute;top:76px;right:26px;display:flex;flex-direction:column;gap:8px;font-family:var(--font-mono);font-size:11px;pointer-events:none;}
+  .legend-row{display:flex;align-items:center;gap:9px;color:var(--text-dim);}
+  .legend-dot{width:8px;height:8px;border-radius:50%;flex:none;box-shadow:0 0 8px 1px currentColor;}
+
+  #controls{
+    position:absolute;top:76px;left:26px;width:250px;
+    background:rgba(17,21,29,0.9);border:1px solid var(--border);border-radius:8px;
+    padding:14px 16px;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+    display:flex;flex-direction:column;gap:12px;
+    box-shadow:0 12px 30px -12px rgba(0,0,0,0.7);
+  }
+  .ctl-label{font-family:var(--font-mono);font-size:10px;letter-spacing:0.04em;color:var(--text-dim);margin-bottom:5px;display:block;}
+  .ctl-row{display:flex;flex-direction:column;}
+  select, input[type=number]{
+    font-family:var(--font-mono);font-size:12px;background:var(--panel-2);color:var(--text);
+    border:1px solid var(--border);border-radius:5px;padding:7px 9px;outline:none;width:100%;
+  }
+  select:focus, input[type=number]:focus{border-color:var(--accent);}
+  .checks{display:flex;gap:14px;font-family:var(--font-mono);font-size:11px;color:var(--text-dim);}
+  .checks label{display:flex;align-items:center;gap:5px;cursor:pointer;}
+  #runBtn{
+    font-family:var(--font-mono);font-size:12px;font-weight:600;letter-spacing:0.02em;
+    background:var(--accent);color:#04222a;border:none;border-radius:6px;padding:10px;cursor:pointer;
+    transition:filter 0.15s ease, transform 0.1s ease;
+  }
+  #runBtn:hover{filter:brightness(1.1);}
+  #runBtn:active{transform:scale(0.98);}
+  #runBtn:disabled{opacity:0.55;cursor:default;}
+  #runStatus{font-family:var(--font-mono);font-size:10px;color:var(--text-faint);min-height:14px;}
+
+  #panel{
+    position:absolute;left:0;right:0;bottom:0;padding:16px 26px 20px;
+    background:linear-gradient(to top, rgba(5,7,10,0.97) 0%, rgba(5,7,10,0.8) 55%, rgba(5,7,10,0));
+    backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+    display:flex;flex-direction:column;gap:14px;
+  }
+  #channels{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:1px;background:var(--border);border:1px solid var(--border);border-radius:8px;overflow:hidden;max-width:900px;box-shadow:0 10px 30px -12px rgba(0,0,0,0.65);}
+  .channel{background:var(--panel);padding:10px 13px;display:flex;flex-direction:column;gap:5px;}
+  .channel-head{display:flex;align-items:center;gap:6px;}
+  .channel-dot{width:6px;height:6px;border-radius:50%;flex:none;box-shadow:0 0 6px 1px currentColor;}
+  .channel-name{font-family:var(--font-mono);font-size:10px;letter-spacing:0.03em;color:var(--text-dim);}
+  .channel-count{font-family:var(--font-mono);font-size:20px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1;}
+  .channel-of{font-family:var(--font-mono);font-size:9px;color:var(--text-faint);}
+  .spark{width:100%;height:20px;display:block;}
+
+  #transport{display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
+  #playBtn{font-family:var(--font-mono);font-size:12px;background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:6px;width:34px;height:34px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:none;}
+  #playBtn:hover{border-color:var(--accent);}
+  #scrubWrap{flex:1;min-width:200px;display:flex;align-items:center;gap:12px;}
+  #tReadout{font-family:var(--font-mono);font-size:12px;color:var(--text);white-space:nowrap;width:64px;}
+  input[type=range]{-webkit-appearance:none;appearance:none;flex:1;height:3px;background:var(--border);border-radius:2px;outline:none;}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:var(--accent);cursor:pointer;border:2px solid var(--bg);box-shadow:0 0 10px 1px rgba(79,209,232,0.7);}
+
+  #eventReadout{font-family:var(--font-mono);font-size:11px;color:var(--text-dim);display:flex;gap:22px;flex-wrap:wrap;}
+  #eventReadout b{color:var(--text);font-weight:500;}
+  #eventReadout .ok{color:var(--ok);}
+  #eventReadout .no{color:var(--text-faint);}
+
+  #stimulusPanel{
+    position:absolute;top:76px;left:292px;width:170px;
+    background:rgba(17,21,29,0.9);border:1px solid var(--border);border-radius:8px;
+    padding:14px 16px;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+    display:flex;flex-direction:column;gap:8px;align-items:center;
+    box-shadow:0 12px 30px -12px rgba(0,0,0,0.7);
+  }
+  #stimSvg{width:100%;aspect-ratio:1;background:#000;border-radius:50%;}
+  #stimReadout{width:100%;font-family:var(--font-mono);font-size:10px;color:var(--text-dim);display:flex;flex-direction:column;gap:3px;}
+  #stimReadout b{color:var(--text);font-weight:500;font-variant-numeric:tabular-nums;}
+
+  #empty{
+    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    font-family:var(--font-mono);font-size:13px;color:var(--text-dim);text-align:center;
+    flex-direction:column;gap:10px;
+  }
+</style>
+</head>
+<body>
+
+<div id="canvas-wrap"></div>
+<div id="empty" style="display:none">connecting to backend...</div>
+
+<div id="topbar">
+  <div>
+    <h1>Fly Brain Lab — Live Connectome <span id="live-badge">LIVE</span></h1>
+    <div class="sub">Every run below calls the real LIF simulation on the actual FlyWire connectome running on this machine — nothing here is pre-baked.</div>
+  </div>
+  <div id="stats">
+    <div><span>dataset</span> <span id="statDataset">—</span></div>
+    <div><span>neurons</span> <span id="statNeurons">—</span></div>
+  </div>
+</div>
+
+<div id="legend">
+  <div class="legend-row"><span class="legend-dot" style="background:var(--lc4)"></span>LC4</div>
+  <div class="legend-row"><span class="legend-dot" style="background:var(--lplc2)"></span>LPLC2</div>
+  <div class="legend-row"><span class="legend-dot" style="background:var(--dnp01)"></span>DNp01</div>
+  <div class="legend-row"><span class="legend-dot" style="background:var(--bg-dot)"></span>other (sampled)</div>
+</div>
+
+<div id="controls">
+  <div class="ctl-row">
+    <span class="ctl-label">stimulus</span>
+    <select id="ctlCondition">
+      <option value="looming" selected>looming</option>
+      <option value="receding">receding</option>
+      <option value="static">static</option>
+    </select>
+  </div>
+  <div class="ctl-row">
+    <span class="ctl-label">approach velocity (cm/s)</span>
+    <input type="number" id="ctlVelocity" value="40" step="5" min="0" max="200">
+  </div>
+  <div class="ctl-row">
+    <span class="ctl-label">silence outbound synapses</span>
+    <div class="checks">
+      <label><input type="checkbox" id="silenceLC4"> LC4</label>
+      <label><input type="checkbox" id="silenceLPLC2"> LPLC2</label>
+    </div>
+  </div>
+  <button id="runBtn">RUN SIMULATION</button>
+  <div id="runStatus"></div>
+</div>
+
+<div id="stimulusPanel">
+  <span class="ctl-label">what the fly sees</span>
+  <svg id="stimSvg" viewBox="0 0 160 160">
+    <circle cx="80" cy="80" r="79" fill="none" stroke="var(--border)" stroke-width="1"/>
+    <circle id="stimDisc" cx="80" cy="80" r="1" fill="#e8ecf1" opacity="0.9"/>
+  </svg>
+  <div id="stimReadout">
+    <div>angular size: <b id="stimAngle">—</b></div>
+    <div>distance: <b id="stimDistance">—</b></div>
+  </div>
+</div>
+
+<div id="panel">
+  <div id="channels">
+    <div class="channel"><div class="channel-head"><span class="channel-dot" style="background:var(--lc4)"></span><span class="channel-name">LC4</span></div><div class="channel-count" id="count-LC4" style="color:var(--lc4)">—</div><div class="channel-of">spikes</div><svg class="spark" id="spark-LC4" viewBox="0 0 100 20" preserveAspectRatio="none"></svg></div>
+    <div class="channel"><div class="channel-head"><span class="channel-dot" style="background:var(--lplc2)"></span><span class="channel-name">LPLC2</span></div><div class="channel-count" id="count-LPLC2" style="color:var(--lplc2)">—</div><div class="channel-of">spikes</div><svg class="spark" id="spark-LPLC2" viewBox="0 0 100 20" preserveAspectRatio="none"></svg></div>
+    <div class="channel"><div class="channel-head"><span class="channel-dot" style="background:var(--dnp01)"></span><span class="channel-name">DNp01</span></div><div class="channel-count" id="count-DNp01" style="color:var(--dnp01)">—</div><div class="channel-of">spikes</div><svg class="spark" id="spark-DNp01" viewBox="0 0 100 20" preserveAspectRatio="none"></svg></div>
+    <div class="channel"><div class="channel-head"><span class="channel-name">ACTIVE</span></div><div class="channel-count" id="count-active" style="color:var(--text)">—</div><div class="channel-of">neurons</div></div>
+    <div class="channel"><div class="channel-head"><span class="channel-name">ESCAPE</span></div><div class="channel-count" id="count-escape" style="color:var(--text)">—</div><div class="channel-of" id="count-escape-t">—</div></div>
+  </div>
+
+  <div id="eventReadout">
+    <div>first sensory spike: <b id="ev-sensory">—</b></div>
+    <div>first DNp01 spike: <b id="ev-dnp01">—</b></div>
+    <div>wall-clock runtime: <b id="ev-runtime">—</b></div>
+  </div>
+
+  <div id="transport">
+    <button id="playBtn">&#9654;</button>
+    <div id="scrubWrap">
+      <span id="tReadout">t = 0 ms</span>
+      <input type="range" id="scrub" min="0" max="59" step="1" value="0">
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(async function(){
+  const COLORS = { LC4: 0x4fd1e8, LPLC2: 0xf5a623, DNp01: 0xff4d6d, bg: 0x5a6478 };
+  let POP_SIZE = { LC4: 104, LPLC2: 210, DNp01: 2 };
+
+  const liveBadge = document.getElementById('live-badge');
+  const emptyEl = document.getElementById('empty');
+
+  async function api(path, opts){
+    const res = await fetch(path, opts);
+    if(!res.ok){ const t = await res.text(); throw new Error(path+' -> '+res.status+': '+t); }
+    return res.json();
+  }
+
+  let health;
+  try {
+    health = await api('/api/health');
+    document.getElementById('statDataset').textContent = health.dataset_version;
+    document.getElementById('statNeurons').textContent = health.n_neurons.toLocaleString();
+    POP_SIZE = { LC4: health.populations.LC4, LPLC2: health.populations.LPLC2, DNp01: health.populations.DNp01 };
+  } catch(e){
+    liveBadge.textContent = 'DOWN';
+    liveBadge.classList.add('down');
+    emptyEl.style.display = 'flex';
+    emptyEl.textContent = 'Cannot reach the backend API. Is uvicorn running?';
+    return;
+  }
+
+  let positions;
+  try {
+    positions = await api('/api/positions');
+  } catch(e){
+    emptyEl.style.display = 'flex';
+    emptyEl.textContent = 'Backend is up, but neuron positions are unavailable (FLYWIRE_V783_DIR not found).';
+    return;
+  }
+
+  // ---------- three.js scene ----------
+  const wrap = document.getElementById('canvas-wrap');
+  const scene = new THREE.Scene();
+  scene.fog = new THREE.FogExp2(0x05070a, 0.00095);
+  const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 1, 5000);
+  camera.position.set(0, 0, 400);
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setClearColor(0x05070a, 1);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.15;
+  wrap.appendChild(renderer.domElement);
+
+  const group = new THREE.Group();
+  scene.add(group);
+
+  const b = positions.bounds;
+  const cx=(b.x[0]+b.x[1])/2, cy=(b.y[0]+b.y[1])/2, cz=(b.z[0]+b.z[1])/2;
+  const span = Math.max(b.x[1]-b.x[0], b.y[1]-b.y[0], b.z[1]-b.z[0]);
+  const scale = 380/span;
+  function toVec(p){ return [(p.x-cx)*scale, -(p.y-cy)*scale, (p.z-cz)*scale]; }
+
+  function makeGlowTexture(){
+    const size=128, c=document.createElement('canvas'); c.width=c.height=size;
+    const ctx=c.getContext('2d');
+    const g=ctx.createRadialGradient(size/2,size/2,0,size/2,size/2,size/2);
+    g.addColorStop(0.0,'rgba(255,255,255,1)'); g.addColorStop(0.22,'rgba(255,255,255,0.85)');
+    g.addColorStop(0.5,'rgba(255,255,255,0.22)'); g.addColorStop(1.0,'rgba(255,255,255,0)');
+    ctx.fillStyle=g; ctx.fillRect(0,0,size,size);
+    const tex = new THREE.CanvasTexture(c); tex.needsUpdate = true; return tex;
+  }
+  const glowTex = makeGlowTexture();
+
+  function makePoints(records, color, size, opacity, additive){
+    const geo = new THREE.BufferGeometry();
+    const arr = new Float32Array(records.length*3);
+    records.forEach((p,i)=>{ const v=toVec(p); arr[i*3]=v[0]; arr[i*3+1]=v[1]; arr[i*3+2]=v[2]; });
+    geo.setAttribute('position', new THREE.BufferAttribute(arr,3));
+    const mat = new THREE.PointsMaterial({ color, size, sizeAttenuation:true, transparent:true, opacity, map:glowTex, depthWrite:false, blending: additive?THREE.AdditiveBlending:THREE.NormalBlending });
+    const pts = new THREE.Points(geo, mat); group.add(pts); return pts;
+  }
+
+  makePoints(positions.background, COLORS.bg, 3.2, 0.4, false);
+  const popPts = {
+    LC4:   makePoints(positions.populations.LC4,   COLORS.LC4,   7.5, 0.55, true),
+    LPLC2: makePoints(positions.populations.LPLC2, COLORS.LPLC2, 7.5, 0.55, true),
+    DNp01: makePoints(positions.populations.DNp01, COLORS.DNp01, 15,  0.75, true),
+  };
+  const BASE_OPACITY = { LC4:0.55, LPLC2:0.55, DNp01:0.75 };
+  const BASE_SIZE    = { LC4:7.5, LPLC2:7.5, DNp01:15 };
+
+  let rotX=-0.15, rotY=0.4, autoRotate=true, dragging=false, lastX=0, lastY=0;
+  renderer.domElement.addEventListener('pointerdown', e=>{ dragging=true; autoRotate=false; lastX=e.clientX; lastY=e.clientY; });
+  window.addEventListener('pointerup', ()=> dragging=false);
+  window.addEventListener('pointermove', e=>{
+    if(!dragging) return;
+    rotY += (e.clientX-lastX)*0.005; rotX += (e.clientY-lastY)*0.005;
+    rotX = Math.max(-1.4, Math.min(1.4, rotX)); lastX=e.clientX; lastY=e.clientY;
+  });
+  renderer.domElement.addEventListener('wheel', e=>{ e.preventDefault(); camera.position.z = Math.max(150, Math.min(1600, camera.position.z + e.deltaY*0.6)); }, {passive:false});
+  window.addEventListener('resize', ()=>{ camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
+
+  // ---------- live simulate ----------
+  let currentSeries = [];
+  let currentStimulus = null; // echoed back from /api/simulate's parameters.stimulus
+  let binIndex = 0, playing = false, lastTick = performance.now();
+  const BIN_MS_REAL = 200;
+
+  // Mirrors brain/sensory/looming.py's _distance_cm / angular_half_size_deg
+  // exactly, so the disc on screen matches what actually drove the simulation
+  // (not a separate, potentially-diverging visual approximation).
+  function distanceCm(tMs, p){
+    const onset = p.stimulus_onset_ms, duration = p.stimulus_duration_ms;
+    if(tMs < onset) return p.initial_distance_cm;
+    if(tMs >= onset + duration){
+      const endElapsedS = duration / 1000.0;
+      return Math.max(p.min_distance_cm, p.initial_distance_cm - p.approach_velocity_cm_s * endElapsedS);
+    }
+    const elapsedS = Math.max(0, tMs - onset) / 1000.0;
+    const d = p.initial_distance_cm - p.approach_velocity_cm_s * elapsedS;
+    return Math.max(p.min_distance_cm, d);
+  }
+  function angularHalfSizeDeg(tMs, p){
+    const d = distanceCm(tMs, p);
+    return Math.atan(p.object_radius_cm / d) * 180 / Math.PI;
+  }
+
+  const stimDisc = document.getElementById('stimDisc');
+  const stimAngle = document.getElementById('stimAngle');
+  const stimDistance = document.getElementById('stimDistance');
+  const MAX_HALF_DEG = 45; // half-angle that fills the panel edge to edge
+
+  function updateStimulusView(tMs){
+    if(!currentStimulus){ stimDisc.setAttribute('r', 1); return; }
+    const half = angularHalfSizeDeg(tMs, currentStimulus);
+    const dist = distanceCm(tMs, currentStimulus);
+    const panelR = 78;
+    const r = Math.max(1, Math.min(panelR, (half / MAX_HALF_DEG) * panelR));
+    const azShift = (currentStimulus.azimuth_deg / 90) * panelR * 0.7;
+    stimDisc.setAttribute('cx', 80 + azShift);
+    stimDisc.setAttribute('r', r);
+    stimDisc.setAttribute('opacity', Math.min(0.95, 0.5 + r / panelR));
+    stimAngle.textContent = (half * 2).toFixed(1) + '°';
+    stimDistance.textContent = dist.toFixed(1) + ' cm';
+  }
+
+  const scrub = document.getElementById('scrub');
+  const tReadout = document.getElementById('tReadout');
+  const playBtn = document.getElementById('playBtn');
+  const runBtn = document.getElementById('runBtn');
+  const runStatus = document.getElementById('runStatus');
+  const CSS_COLOR = { LC4:'#4fd1e8', LPLC2:'#f5a623', DNp01:'#ff4d6d' };
+
+  function drawSparklines(){
+    ['LC4','LPLC2','DNp01'].forEach(name=>{
+      const data = currentSeries.map(r=>r[name]);
+      const max = Math.max(1, ...data);
+      const w=100,h=20;
+      const pts = data.map((v,i)=>{
+        const x=(i/(Math.max(1,data.length-1)))*w;
+        const y=h-(v/max)*h*0.9-1;
+        return x.toFixed(1)+','+y.toFixed(1);
+      }).join(' ');
+      const svg = document.getElementById('spark-'+name);
+      svg.innerHTML = '<polyline points="'+pts+'" fill="none" stroke="'+CSS_COLOR[name]+'" stroke-width="1.3" opacity="0.85"/>'+
+        '<line id="playhead-'+name+'" x1="0" y1="0" x2="0" y2="'+h+'" stroke="'+CSS_COLOR[name]+'" stroke-width="1" opacity="0.9"/>';
+    });
+  }
+
+  function updateReadout(){
+    if(!currentSeries.length) return;
+    const row = currentSeries[binIndex];
+    tReadout.textContent = 't = ' + row.t_ms.toFixed(0) + ' ms';
+    scrub.value = binIndex;
+    updateStimulusView(row.t_ms);
+    const pct = (binIndex/Math.max(1,currentSeries.length-1))*100;
+    scrub.style.background = 'linear-gradient(to right, var(--accent) '+pct+'%, var(--border) '+pct+'%)';
+    ['LC4','LPLC2','DNp01'].forEach(name=>{
+      document.getElementById('count-'+name).textContent = row[name];
+      const ph = document.getElementById('playhead-'+name);
+      if(ph){ const x=(binIndex/Math.max(1,currentSeries.length-1))*100; ph.setAttribute('x1',x); ph.setAttribute('x2',x); }
+      const frac = Math.min(1, row[name]/POP_SIZE[name]);
+      const boosted = Math.sqrt(frac);
+      popPts[name].material.opacity = BASE_OPACITY[name] + (1-BASE_OPACITY[name])*boosted;
+      popPts[name].material.size = BASE_SIZE[name] * (1+boosted*1.6);
+    });
+  }
+
+  async function runSimulation(){
+    runBtn.disabled = true;
+    runStatus.textContent = 'running live simulation...';
+    playing = false; playBtn.innerHTML = '&#9654;';
+
+    const silenced = [];
+    if(document.getElementById('silenceLC4').checked) silenced.push('LC4');
+    if(document.getElementById('silenceLPLC2').checked) silenced.push('LPLC2');
+
+    const condition = document.getElementById('ctlCondition').value;
+    const body = {
+      condition,
+      silenced_populations: silenced,
+    };
+    // Only override velocity for "looming" — sending it for receding/static
+    // would defeat their own -40/0 defaults server-side (the exact bug
+    // caught in the Phase 0B CLI scripts; same fix applies here).
+    if(condition === 'looming'){
+      body.approach_velocity_cm_s = parseFloat(document.getElementById('ctlVelocity').value);
+    }
+
+    const t0 = performance.now();
+    try {
+      const result = await api('/api/simulate', {
+        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+      });
+      const clientMs = performance.now()-t0;
+      currentSeries = result.time_series;
+      currentStimulus = result.parameters.stimulus;
+      binIndex = 0;
+      scrub.max = currentSeries.length-1;
+      drawSparklines();
+      updateReadout();
+
+      document.getElementById('count-active').textContent = result.n_active_neurons;
+      document.getElementById('count-escape').textContent = result.escape_triggered ? 'YES' : 'no';
+      document.getElementById('count-escape').style.color = result.escape_triggered ? 'var(--ok)' : 'var(--text-faint)';
+      document.getElementById('count-escape-t').textContent = result.escape_trigger_time_ms!=null ? ('@ '+result.escape_trigger_time_ms.toFixed(1)+'ms') : 'no trigger';
+      document.getElementById('ev-sensory').textContent = result.first_sensory_spike_time_ms!=null ? result.first_sensory_spike_time_ms.toFixed(1)+' ms' : 'never';
+      document.getElementById('ev-dnp01').textContent = result.first_dnp01_spike_time_ms!=null ? result.first_dnp01_spike_time_ms.toFixed(1)+' ms' : 'never';
+      document.getElementById('ev-runtime').textContent = result.wall_clock_runtime_s.toFixed(3)+'s (sim) / '+(clientMs/1000).toFixed(2)+'s (round-trip)';
+
+      runStatus.textContent = 'done — ' + new Date().toLocaleTimeString();
+      playing = true; playBtn.innerHTML = '&#10074;&#10074;';
+    } catch(e){
+      runStatus.textContent = 'ERROR: ' + e.message;
+    } finally {
+      runBtn.disabled = false;
+    }
+  }
+
+  const ctlCondition = document.getElementById('ctlCondition');
+  const ctlVelocity = document.getElementById('ctlVelocity');
+  function syncVelocityEnabled(){
+    const isLooming = ctlCondition.value === 'looming';
+    ctlVelocity.disabled = !isLooming;
+    ctlVelocity.style.opacity = isLooming ? '1' : '0.4';
+  }
+  ctlCondition.addEventListener('change', syncVelocityEnabled);
+  syncVelocityEnabled();
+
+  runBtn.addEventListener('click', runSimulation);
+  playBtn.addEventListener('click', ()=>{ playing=!playing; playBtn.innerHTML = playing?'&#10074;&#10074;':'&#9654;'; });
+  scrub.addEventListener('input', ()=>{ playing=false; playBtn.innerHTML='&#9654;'; binIndex=parseInt(scrub.value,10); updateReadout(); });
+
+  function animate(now){
+    requestAnimationFrame(animate);
+    if(autoRotate) rotY += 0.0009;
+    group.rotation.x = rotX; group.rotation.y = rotY;
+    if(playing && currentSeries.length && now-lastTick>BIN_MS_REAL){
+      lastTick = now;
+      binIndex = (binIndex+1) % currentSeries.length;
+      updateReadout();
+    }
+    renderer.render(scene, camera);
+  }
+  requestAnimationFrame(animate);
+
+  // run once on load so the page opens in a real, non-empty state
+  runSimulation();
+})();
+</script>
+</body>
+</html>

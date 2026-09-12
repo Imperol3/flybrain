@@ -1,0 +1,7 @@
+-r requirements.txt
+pytest>=8.0
+
+# Brian2 is an OPTIONAL reference/cross-check dependency (see docs/BIOLOGICAL_ASSUMPTIONS.md).
+# It is not required to build the connectome, run experiments, or pass the test suite.
+# Uncomment to enable the optional Brian2 cross-check tests:
+# brian2>=2.5.4
