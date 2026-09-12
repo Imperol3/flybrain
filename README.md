@@ -38,19 +38,28 @@ LIF simulation compute and animate on the real connectome, including a
 with `uvicorn api.main:app --port 8010` (or via the Browser pane's
 dev-server preview, see `.claude/launch.json` at the repo root).
 
-## Embodied 3D fly viewer
+## Viewer V2 — embodied closed loop
 
-Open `http://localhost:8010/fly` after starting the API. This view renders
-a complete procedural fruit fly (body, compound eyes, antennae, wings, six
-articulated legs, and an optional brain-in-head overlay) inside a simple box
-environment. Each **RUN BRAIN** action calls the live `/api/simulate`
-endpoint, then maps the resulting DNa02 left/right differential to body
-turning and a DNp01 threshold crossing to an escape burst.
+Open `http://localhost:8010/fly` after starting the API. Viewer V2 keeps
+membrane voltage, synaptic state, and the transmission-delay buffer alive
+between 25 ms simulation windows. After every window it:
 
-This is **Phase 1A embodied playback**, not yet closed-loop navigation:
-one complete brain run produces one movement sequence. The next step is to
-preserve LIF state across short simulation windows and repeatedly recompute
-the stimulus from the fly's updated position and heading.
+1. recomputes the threat's distance and bearing relative to the fly,
+2. generates the new visual expansion drive,
+3. advances the real whole-connectome LIF state,
+4. reads DNa02-L/R and DNp01,
+5. updates body position, height, and heading, and
+6. feeds the changed world geometry into the next neural window.
+
+The viewer is split into reusable modules under `api/static/viewer-v2/`.
+It renders the real connectome coordinates inside the fly's head, animates
+an articulated full-body avatar, streams telemetry over WebSocket, and
+provides orbit, chase, overhead, and fly-eye cameras. The original
+single-run playback remains available at `/fly-v1`.
+
+The body decoder is still an explicit engineering stand-in for the missing
+ventral nerve cord, muscles, and biomechanics; see
+`docs/BIOLOGICAL_ASSUMPTIONS.md` section 4d.
 
 ## What this is
 
