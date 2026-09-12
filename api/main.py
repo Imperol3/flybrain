@@ -220,6 +220,12 @@ def simulate(req: SimulateRequest):
     return condition_dict
 
 
+@app.get("/fly")
+def embodied_fly():
+    """Embodied playback: full 3D fly driven by DNa02/DNp01 readouts."""
+    return FileResponse(str(STATIC_DIR / "fly.html"))
+
+
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
