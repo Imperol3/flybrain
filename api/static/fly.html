@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fly Brain Lab — Embodied Fly</title>
+<style>
+  :root{--bg:#070a0d;--panel:rgba(13,18,23,.88);--line:#25313c;--text:#eef3f5;--muted:#8c9aa6;--cyan:#4fd1e8;--amber:#f5a623;--red:#ff4d6d;--green:#58d68d}
+  *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,sans-serif}
+  canvas{display:block}button,select,input{font:inherit}
+  #stage{position:fixed;inset:0}
+  .glass{background:var(--panel);border:1px solid var(--line);border-radius:12px;backdrop-filter:blur(14px);box-shadow:0 18px 45px rgba(0,0,0,.28)}
+  #header{position:fixed;left:22px;right:22px;top:18px;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none}
+  h1{font-size:17px;margin:0 0 5px;letter-spacing:.01em}.sub{font-size:12px;color:var(--muted);max-width:620px;line-height:1.45}
+  .badge{display:inline-flex;margin-left:8px;padding:2px 7px;border:1px solid var(--green);border-radius:999px;color:var(--green);font:600 9px ui-monospace,monospace;letter-spacing:.08em;vertical-align:2px}
+  #dataset{font:11px ui-monospace,monospace;color:var(--muted);text-align:right;line-height:1.6}
+  #controls{position:fixed;top:82px;left:22px;width:252px;padding:14px;display:grid;gap:11px}
+  label{font:10px ui-monospace,monospace;color:var(--muted);letter-spacing:.05em;text-transform:uppercase}
+  select,input[type=number]{width:100%;margin-top:5px;padding:8px 9px;background:#131a21;border:1px solid var(--line);border-radius:7px;color:var(--text);outline:none}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:8px}.check{display:flex;align-items:center;gap:7px;font:11px ui-monospace,monospace;color:var(--muted);text-transform:none;letter-spacing:0}
+  button{border:1px solid var(--line);border-radius:8px;padding:9px 10px;background:#151d25;color:var(--text);cursor:pointer}button:hover{border-color:var(--cyan)}button.primary{background:var(--cyan);border-color:var(--cyan);color:#062129;font-weight:700}button:disabled{opacity:.5;cursor:wait}
+  #status{min-height:14px;font:10px ui-monospace,monospace;color:var(--muted)}
+  #neural{position:fixed;right:22px;top:82px;width:230px;padding:14px;display:grid;gap:9px}
+  .metric{display:grid;grid-template-columns:1fr auto;align-items:baseline;border-bottom:1px solid rgba(37,49,60,.7);padding-bottom:7px}.metric:last-child{border-bottom:0;padding-bottom:0}.metric span{font:11px ui-monospace,monospace;color:var(--muted)}.metric b{font:600 16px ui-monospace,monospace}.cyan{color:var(--cyan)}.amber{color:var(--amber)}.red{color:var(--red)}
+  #footer{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);width:min(760px,calc(100vw - 44px));padding:11px 14px;display:flex;align-items:center;gap:13px}
+  #play{width:38px;height:34px;padding:0}.timeline{height:4px;background:var(--line);border-radius:99px;flex:1;overflow:hidden}.timeline>i{display:block;width:0;height:100%;background:linear-gradient(90deg,var(--cyan),var(--red))}
+  #readout{min-width:190px;font:11px ui-monospace,monospace;color:var(--muted);text-align:right}
+  #mode{position:fixed;right:22px;bottom:82px;padding:9px 11px;font:10px ui-monospace,monospace;color:var(--muted)}
+  @media(max-width:760px){#dataset{display:none}#controls{width:210px;top:72px;left:12px}#neural{right:12px;top:72px;width:175px}#header{left:12px;top:12px}.sub{max-width:360px}#mode{display:none}}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<header id="header"><div><h1>Embodied Fly <span class="badge">BRAIN DRIVEN</span></h1><div class="sub">A complete 3D fly whose turn and escape motion are decoded from the live connectome simulation.</div></div><div id="dataset">connecting…</div></header>
+
+<section id="controls" class="glass">
+  <label>Threat direction<select id="azimuth"><option value="-45">left · −45°</option><option value="0">centred · 0°</option><option value="45" selected>right · +45°</option></select></label>
+  <label>Approach speed<input id="velocity" type="number" min="5" max="200" step="5" value="40"> <span style="text-transform:none">cm/s</span></label>
+  <div class="row"><label class="check"><input id="silenceLC4" type="checkbox">silence LC4</label><label class="check"><input id="silenceLPLC2" type="checkbox">silence LPLC2</label></div>
+  <label class="check"><input id="brainToggle" type="checkbox" checked>show brain inside head</label>
+  <label>Camera<select id="cameraMode"><option value="chase">chase</option><option value="orbit" selected>orbit</option><option value="top">overhead</option><option value="eye">fly-eye</option></select></label>
+  <div class="row"><button id="reset">RESET</button><button id="run" class="primary">RUN BRAIN</button></div>
+  <div id="status">ready</div>
+</section>
+
+<section id="neural" class="glass">
+  <div class="metric"><span>LC4 spikes</span><b id="lc4" class="cyan">—</b></div>
+  <div class="metric"><span>LPLC2 spikes</span><b id="lplc2" class="amber">—</b></div>
+  <div class="metric"><span>DNp01 spikes</span><b id="dnp01" class="red">—</b></div>
+  <div class="metric"><span>DNa02 left</span><b id="dnaL">—</b></div>
+  <div class="metric"><span>DNa02 right</span><b id="dnaR">—</b></div>
+  <div class="metric"><span>turn signal</span><b id="turn">—</b></div>
+  <div class="metric"><span>behaviour</span><b id="behaviour" style="font-size:12px">IDLE</b></div>
+</section>
+
+<section id="footer" class="glass"><button id="play">▶</button><div class="timeline"><i id="progress"></i></div><div id="readout">x 0.0 · z 0.0 · heading 0°</div></section>
+<div id="mode" class="glass">Phase 1A · embodied playback · closed-loop navigation follows</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(() => {
+  const stage = document.getElementById('stage');
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x070a0d);
+  scene.fog = new THREE.Fog(0x070a0d, 32, 85);
+  const camera = new THREE.PerspectiveCamera(44, innerWidth / innerHeight, .05, 180);
+  const renderer = new THREE.WebGLRenderer({antialias:true});
+  renderer.setSize(innerWidth,innerHeight); renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+  renderer.outputEncoding=THREE.sRGBEncoding; renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.15;
+  stage.appendChild(renderer.domElement);
+
+  scene.add(new THREE.HemisphereLight(0xb8d9ea,0x151006,1.35));
+  const key=new THREE.DirectionalLight(0xffffff,2.2); key.position.set(-10,18,8); key.castShadow=true; key.shadow.mapSize.set(2048,2048); scene.add(key);
+  const rim=new THREE.PointLight(0x4fd1e8,2.3,35); rim.position.set(10,7,-8); scene.add(rim);
+
+  const floor=new THREE.Mesh(new THREE.PlaneGeometry(70,70),new THREE.MeshStandardMaterial({color:0x11171b,roughness:.92,metalness:.05}));
+  floor.rotation.x=-Math.PI/2; floor.receiveShadow=true; scene.add(floor);
+  const grid=new THREE.GridHelper(70,70,0x263640,0x182128); grid.position.y=.012; scene.add(grid);
+
+  const boxMat=new THREE.MeshPhysicalMaterial({color:0x47606e,transparent:true,opacity:.08,roughness:.25,side:THREE.DoubleSide});
+  const wallGeo=new THREE.PlaneGeometry(24,8); const walls=[];
+  function wall(x,y,z,ry){const w=new THREE.Mesh(wallGeo,boxMat);w.position.set(x,y,z);w.rotation.y=ry;scene.add(w);walls.push(w)}
+  wall(0,4,-12,0);wall(-12,4,0,Math.PI/2);wall(12,4,0,-Math.PI/2);
+  const exitL=new THREE.Mesh(new THREE.BoxGeometry(8,.18,.2),new THREE.MeshBasicMaterial({color:0x58d68d}));exitL.position.set(0,.1,12);scene.add(exitL);
+
+  const MAT={
+    body:new THREE.MeshPhysicalMaterial({color:0x2d231b,roughness:.58,metalness:.03,clearcoat:.2}),
+    abdomen:new THREE.MeshPhysicalMaterial({color:0x35291d,roughness:.62}),
+    joint:new THREE.MeshStandardMaterial({color:0x17130f,roughness:.7}),
+    eye:new THREE.MeshPhysicalMaterial({color:0x7e1830,roughness:.32,clearcoat:.75}),
+    wing:new THREE.MeshPhysicalMaterial({color:0xbad9de,transparent:true,opacity:.4,roughness:.18,side:THREE.DoubleSide,depthWrite:false}),
+    brain:new THREE.MeshBasicMaterial({color:0x4fd1e8,transparent:true,opacity:.72,wireframe:true}),
+    glow:new THREE.MeshBasicMaterial({color:0x4fd1e8,transparent:true,opacity:.12,side:THREE.BackSide})
+  };
+  const fly=new THREE.Group(); fly.position.set(0,1.25,4); scene.add(fly);
+  const body=new THREE.Group(); body.rotation.y=Math.PI; fly.add(body); // local nose points toward -Z
+  function ellipsoid(name,r,scale,pos,mat,segments=32){const m=new THREE.Mesh(new THREE.SphereGeometry(r,segments,Math.max(12,segments/2)),mat);m.name=name;m.scale.set(...scale);m.position.set(...pos);m.castShadow=true;m.receiveShadow=true;body.add(m);return m}
+  const thorax=ellipsoid('thorax',1,[1.2,1,1.38],[0,0,0],MAT.body);
+  const abdomen=ellipsoid('abdomen',1,[.95,.72,2.05],[0,-.05,2.45],MAT.abdomen);
+  const head=ellipsoid('head',1,[1.08,.95,.92],[0,.1,-1.75],MAT.body);
+  ellipsoid('eyeL',.62,[.6,.92,.7],[-.82,.18,-1.98],MAT.eye,24); ellipsoid('eyeR',.62,[.6,.92,.7],[.82,.18,-1.98],MAT.eye,24);
+
+  const brain=ellipsoid('brain',.7,[.8,.55,.58],[0,.18,-1.68],MAT.brain,20);
+  const brainGlow=ellipsoid('brainGlow',.75,[.9,.65,.68],[0,.18,-1.68],MAT.glow,20);
+
+  function cylinderBetween(a,b,r,mat,parent=body){const d=new THREE.Vector3().subVectors(b,a),mid=new THREE.Vector3().addVectors(a,b).multiplyScalar(.5);const m=new THREE.Mesh(new THREE.CylinderGeometry(r,r*.72,d.length(),9),mat);m.position.copy(mid);m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),d.clone().normalize());m.castShadow=true;parent.add(m);return m}
+  // Antennae and aristae
+  [-1,1].forEach(side=>{const root=new THREE.Vector3(side*.4,.62,-2.45),tip=new THREE.Vector3(side*.58,.95,-3.05),far=new THREE.Vector3(side*1.02,1.2,-3.45);cylinderBetween(root,tip,.055,MAT.joint);cylinderBetween(tip,far,.025,MAT.joint)});
+  cylinderBetween(new THREE.Vector3(0,-.45,-2.48),new THREE.Vector3(0,-.72,-3.0),.075,MAT.joint);
+
+  const wingPivots=[];
+  function makeWing(side){const pivot=new THREE.Group();pivot.position.set(side*.62,.56,.35);body.add(pivot);const shape=new THREE.Shape();shape.moveTo(0,0);shape.bezierCurveTo(side*1.2,.2,side*2.5,.45,side*3.7,.05);shape.bezierCurveTo(side*3.2,-.55,side*1.7,-.9,0,0);const wing=new THREE.Mesh(new THREE.ShapeGeometry(shape,20),MAT.wing);wing.rotation.x=-Math.PI/2;wing.castShadow=true;pivot.add(wing);wingPivots.push(pivot);return pivot}
+  makeWing(-1);makeWing(1);
+
+  const legPivots=[];
+  function makeLeg(side,z,phase){const hip=new THREE.Group();hip.position.set(side*.72,-.5,z);body.add(hip);const knee=new THREE.Vector3(side*1.15,-.72,(z<0?z-.55:z+.25));const foot=new THREE.Vector3(side*1.8,-1.22,(z<0?z-1:z+1.25));cylinderBetween(new THREE.Vector3(0,0,0),knee.clone().sub(hip.position),.07,MAT.joint,hip);cylinderBetween(knee.clone().sub(hip.position),foot.clone().sub(hip.position),.045,MAT.joint,hip);legPivots.push({hip,side,phase})}
+  [-1,1].forEach(side=>{makeLeg(side,-.55,0);makeLeg(side,.15,2.1);makeLeg(side,.75,4.2)});
+
+  const threat=new THREE.Group(); scene.add(threat);
+  const threatCore=new THREE.Mesh(new THREE.SphereGeometry(.75,28,18),new THREE.MeshPhysicalMaterial({color:0xe8edf0,roughness:.35,emissive:0x2a3035}));threatCore.castShadow=true;threat.add(threatCore);
+  const threatRing=new THREE.Mesh(new THREE.TorusGeometry(1.05,.035,8,64),new THREE.MeshBasicMaterial({color:0xff4d6d,transparent:true,opacity:.7}));threatRing.rotation.x=Math.PI/2;threat.add(threatRing);
+
+  const shadow=new THREE.Mesh(new THREE.CircleGeometry(1.45,40),new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:.35,depthWrite:false}));shadow.rotation.x=-Math.PI/2;shadow.position.y=.025;scene.add(shadow);
+
+  const state={playing:false,progress:0,duration:4.5,last:performance.now(),heading:0,position:new THREE.Vector3(0,1.25,4),result:null,orbit:.45};
+  function resetFly(){state.playing=false;state.progress=0;state.heading=0;state.position.set(0,1.25,4);fly.position.copy(state.position);fly.rotation.y=0;document.getElementById('progress').style.width='0%';document.getElementById('behaviour').textContent='IDLE';document.getElementById('play').textContent='▶'}
+
+  function setThreat(){const az=Number(document.getElementById('azimuth').value)*Math.PI/180;const distance=13;threat.position.set(Math.sin(az)*distance,2.3,fly.position.z-Math.cos(az)*distance)}
+  setThreat();
+
+  function neuralBehaviour(p,dt){if(!state.result)return;const result=state.result;const trigger=result.escape_trigger_time_ms==null?.42:Math.min(.7,result.escape_trigger_time_ms/result.simulation_duration_ms);const lat=result.lateralized||{};const signal=Number(lat.steering_signal_hz||0);const capped=THREE.MathUtils.clamp(signal/130,-1,1);let speed=0,turnRate=0,jump=0,behaviour='ASSESSING';
+    if(p>.12){turnRate=capped*1.25;if(Math.abs(capped)>.08)behaviour=capped>0?'TURNING LEFT':'TURNING RIGHT'}
+    if(result.escape_triggered&&p>trigger){const q=(p-trigger)/(1-trigger);speed=5+10*Math.min(1,q*2.5);jump=Math.sin(Math.min(1,q*1.8)*Math.PI)*2.7;behaviour=q<.45?'TAKEOFF':'ESCAPING'}
+    state.heading+=turnRate*dt;state.position.x+=Math.sin(state.heading)*speed*dt;state.position.z-=Math.cos(state.heading)*speed*dt;fly.position.set(state.position.x,1.25+jump,state.position.z);fly.rotation.y=state.heading;
+    const stride=performance.now()*.016*(speed>0?2.8:.35);legPivots.forEach(o=>o.hip.rotation.x=Math.sin(stride+o.phase)*(.1+speed*.02));const flap=speed>0?Math.sin(performance.now()*.09)*.8:Math.sin(performance.now()*.008)*.04;wingPivots[0].rotation.z=flap;wingPivots[1].rotation.z=-flap;
+    document.getElementById('behaviour').textContent=behaviour;document.getElementById('readout').textContent=`x ${state.position.x.toFixed(1)} · z ${state.position.z.toFixed(1)} · heading ${(state.heading*180/Math.PI).toFixed(0)}°`;
+  }
+
+  async function runBrain(){const btn=document.getElementById('run');btn.disabled=true;document.getElementById('status').textContent='running 139k-neuron simulation…';resetFly();setThreat();const silenced=[];if(document.getElementById('silenceLC4').checked)silenced.push('LC4');if(document.getElementById('silenceLPLC2').checked)silenced.push('LPLC2');
+    try{const res=await fetch('/api/simulate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({condition:'looming',approach_velocity_cm_s:Number(document.getElementById('velocity').value),azimuth_deg:Number(document.getElementById('azimuth').value),silenced_populations:silenced})});if(!res.ok)throw new Error(await res.text());const r=await res.json();state.result=r;
+      const lat=r.lateralized||{};document.getElementById('lc4').textContent=r.lc4_spike_count;document.getElementById('lplc2').textContent=r.lplc2_spike_count;document.getElementById('dnp01').textContent=r.dnp01_spike_count;document.getElementById('dnaL').textContent=(lat.dna02_left_firing_rate_hz??0).toFixed(1)+' Hz';document.getElementById('dnaR').textContent=(lat.dna02_right_firing_rate_hz??0).toFixed(1)+' Hz';document.getElementById('turn').textContent=(lat.steering_signal_hz??0).toFixed(1)+' Hz';
+      document.getElementById('status').textContent=`simulation complete · ${r.wall_clock_runtime_s.toFixed(2)}s`;state.playing=true;state.last=performance.now();document.getElementById('play').textContent='❚❚';
+    }catch(e){document.getElementById('status').textContent='ERROR · '+e.message;}finally{btn.disabled=false}}
+
+  async function health(){try{const r=await fetch('/api/health');if(!r.ok)throw 0;const h=await r.json();document.getElementById('dataset').innerHTML=`${h.dataset_version}<br>${h.n_neurons.toLocaleString()} neurons`;}catch{document.getElementById('dataset').textContent='backend offline';document.getElementById('status').textContent='start uvicorn to run the live brain';}}
+
+  let dragging=false,lastX=0;
+  renderer.domElement.addEventListener('pointerdown',e=>{dragging=true;lastX=e.clientX});addEventListener('pointerup',()=>dragging=false);addEventListener('pointermove',e=>{if(dragging&&document.getElementById('cameraMode').value==='orbit'){state.orbit+=(e.clientX-lastX)*.006;lastX=e.clientX}});
+  renderer.domElement.addEventListener('wheel',e=>{camera.fov=THREE.MathUtils.clamp(camera.fov+e.deltaY*.018,28,70);camera.updateProjectionMatrix()},{passive:true});
+  document.getElementById('run').onclick=runBrain;document.getElementById('reset').onclick=resetFly;document.getElementById('azimuth').onchange=setThreat;document.getElementById('brainToggle').onchange=e=>{brain.visible=brainGlow.visible=e.target.checked};document.getElementById('play').onclick=()=>{if(!state.result)return;state.playing=!state.playing;state.last=performance.now();document.getElementById('play').textContent=state.playing?'❚❚':'▶'};
+  addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
+
+  function updateCamera(){const mode=document.getElementById('cameraMode').value,target=fly.position.clone();if(mode==='top'){camera.position.lerp(new THREE.Vector3(target.x,24,target.z+1),.08);camera.lookAt(target)}else if(mode==='eye'){const forward=new THREE.Vector3(Math.sin(state.heading),0,-Math.cos(state.heading));camera.position.copy(target).add(new THREE.Vector3(0,.65,0)).add(forward.clone().multiplyScalar(1.5));camera.lookAt(camera.position.clone().add(forward.multiplyScalar(8)))}else if(mode==='chase'){const behind=new THREE.Vector3(-Math.sin(state.heading)*9,5,Math.cos(state.heading)*9);camera.position.lerp(target.clone().add(behind),.06);camera.lookAt(target)}else{const offset=new THREE.Vector3(Math.sin(state.orbit)*13,7,Math.cos(state.orbit)*13);camera.position.lerp(target.clone().add(offset),.06);camera.lookAt(target)}}
+  function animate(now){requestAnimationFrame(animate);const dt=Math.min(.05,(now-state.last)/1000);state.last=now;if(state.playing&&state.result){state.progress=Math.min(1,state.progress+dt/state.duration);neuralBehaviour(state.progress,dt);document.getElementById('progress').style.width=(state.progress*100)+'%';if(state.progress>=1){state.playing=false;document.getElementById('play').textContent='▶'}}else{const idle=now*.002;fly.position.y=state.position.y+Math.sin(idle)*.025;wingPivots[0].rotation.z=Math.sin(idle)*.025;wingPivots[1].rotation.z=-Math.sin(idle)*.025;legPivots.forEach(o=>o.hip.rotation.x=Math.sin(idle+o.phase)*.04)}
+    brain.rotation.y+=dt*.7;brain.material.opacity=.55+Math.sin(now*.004)*.17;shadow.position.set(fly.position.x,.025,fly.position.z);shadow.scale.setScalar(THREE.MathUtils.clamp(1.3-(fly.position.y-1.25)*.14,.55,1.3));updateCamera();renderer.render(scene,camera)}
+  resetFly();health();requestAnimationFrame(animate);
+})();
+</script>
+</body>
+</html>

@@ -38,6 +38,20 @@ LIF simulation compute and animate on the real connectome, including a
 with `uvicorn api.main:app --port 8010` (or via the Browser pane's
 dev-server preview, see `.claude/launch.json` at the repo root).
 
+## Embodied 3D fly viewer
+
+Open `http://localhost:8010/fly` after starting the API. This view renders
+a complete procedural fruit fly (body, compound eyes, antennae, wings, six
+articulated legs, and an optional brain-in-head overlay) inside a simple box
+environment. Each **RUN BRAIN** action calls the live `/api/simulate`
+endpoint, then maps the resulting DNa02 left/right differential to body
+turning and a DNp01 threshold crossing to an escape burst.
+
+This is **Phase 1A embodied playback**, not yet closed-loop navigation:
+one complete brain run produces one movement sequence. The next step is to
+preserve LIF state across short simulation windows and repeatedly recompute
+the stimulus from the fly's updated position and heading.
+
 ## What this is
 
 An engineering baseline that runs a real FlyWire FAFB v783 connectome
