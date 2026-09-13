@@ -40,14 +40,20 @@ from brain import provenance
 from brain.connectivity import loaders
 from brain.neurons import registry as registry_module
 from brain.sensory import looming
-from simulation import closed_loop, reporting, session
+from simulation import closed_loop, escape_chamber, reporting, session
 
 app = FastAPI(title="Fly Brain Lab — Live API")
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 UI_SESSION_LOG = config.METADATA_DIR / "ui_session_log.jsonl"
 
-_state: dict = {"registry": None, "connectome": None, "positions": None, "closed_loop_sessions": {}}
+_state: dict = {
+    "registry": None,
+    "connectome": None,
+    "positions": None,
+    "closed_loop_sessions": {},
+    "escape_chamber_sessions": {},
+}
 
 
 def _load_backend():
@@ -140,6 +146,11 @@ class ClosedLoopStartRequest(BaseModel):
     gain_mV_per_unit: float = Field(default=16.0, gt=0.0, le=500.0)
     silenced_populations: list[str] = Field(default_factory=list)
     seed: int = 12345
+
+
+class EscapeChamberStartRequest(ClosedLoopStartRequest):
+    maximum_duration_ms: float = Field(default=12000.0, ge=1000.0, le=60000.0)
+    navigation_assist: bool = True
 
 
 class SimulateRequest(BaseModel):
@@ -302,6 +313,78 @@ async def stream_closed_loop(websocket: WebSocket, session_id: str):
             _state["closed_loop_sessions"].pop(session_id, None)
 
 
+@app.post("/api/escape-chamber/sessions")
+def start_escape_chamber(req: EscapeChamberStartRequest):
+    registry, connectome = _state["registry"], _state["connectome"]
+    if registry is None:
+        raise HTTPException(503, "Backend not loaded")
+    unknown = set(req.silenced_populations) - set(registry.populations)
+    if unknown:
+        raise HTTPException(400, f"Unknown population(s): {sorted(unknown)}")
+
+    body = closed_loop.BodyState()
+    threat = closed_loop.threat_from_azimuth(
+        body,
+        azimuth_deg=req.azimuth_deg,
+        distance_cm=req.initial_distance_cm,
+        radius_cm=req.object_radius_cm,
+        approach_velocity_cm_s=req.approach_velocity_cm_s,
+    )
+    trial = escape_chamber.EscapeChamberSession(
+        registry=registry,
+        connectome=connectome,
+        body=body,
+        threat=threat,
+        step_ms=req.step_ms,
+        maximum_duration_ms=req.maximum_duration_ms,
+        gain_mV_per_unit=req.gain_mV_per_unit,
+        silenced_populations=tuple(req.silenced_populations),
+        navigation_assist=req.navigation_assist,
+        seed=req.seed,
+    )
+    session_id = uuid4().hex
+    sessions = _state["escape_chamber_sessions"]
+    if len(sessions) >= 16:
+        sessions.pop(next(iter(sessions)))
+    sessions[session_id] = trial
+    return {"session_id": session_id, "state": trial.snapshot()}
+
+
+def _get_escape_chamber(session_id: str):
+    trial = _state["escape_chamber_sessions"].get(session_id)
+    if trial is None:
+        raise HTTPException(404, "Escape-chamber session not found or expired")
+    return trial
+
+
+@app.post("/api/escape-chamber/sessions/{session_id}/step")
+def step_escape_chamber(session_id: str):
+    return _get_escape_chamber(session_id).step()
+
+
+@app.websocket("/api/escape-chamber/sessions/{session_id}/stream")
+async def stream_escape_chamber(websocket: WebSocket, session_id: str):
+    await websocket.accept()
+    trial = _state["escape_chamber_sessions"].get(session_id)
+    if trial is None:
+        await websocket.send_json({"error": "Escape-chamber session not found or expired"})
+        await websocket.close(code=4404)
+        return
+    try:
+        while not trial.done:
+            frame = await asyncio.to_thread(trial.step)
+            await websocket.send_json(frame)
+            # Pace this experiment in wall-clock time so movement, collisions and
+            # decisions remain observable instead of completing as a data burst.
+            await asyncio.sleep(trial.step_ms / 1000.0)
+        await websocket.send_json(trial.snapshot())
+    except WebSocketDisconnect:
+        return
+    finally:
+        if trial.done:
+            _state["escape_chamber_sessions"].pop(session_id, None)
+
+
 @app.get("/fly-v1")
 def embodied_fly_v1():
     """Original single-run embodied playback viewer."""
@@ -316,7 +399,13 @@ def embodied_fly_v2():
 
 @app.get("/fly")
 def embodied_fly():
-    """Viewer V3: cinematic laboratory presentation of the same closed loop."""
+    """Viewer V4: a measurable, obstacle-filled escape chamber."""
+    return FileResponse(str(STATIC_DIR / "viewer-v4.html"))
+
+
+@app.get("/fly-v3")
+def embodied_fly_v3():
+    """Viewer V3: cinematic laboratory presentation of the basic closed loop."""
     return FileResponse(str(STATIC_DIR / "viewer-v3.html"))
 
 
