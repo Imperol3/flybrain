@@ -308,10 +308,16 @@ def embodied_fly_v1():
     return FileResponse(str(STATIC_DIR / "fly.html"))
 
 
-@app.get("/fly")
-def embodied_fly():
+@app.get("/fly-v2")
+def embodied_fly_v2():
     """Viewer V2: persistent brain state in an embodied closed loop."""
     return FileResponse(str(STATIC_DIR / "viewer-v2.html"))
+
+
+@app.get("/fly")
+def embodied_fly():
+    """Viewer V3: cinematic laboratory presentation of the same closed loop."""
+    return FileResponse(str(STATIC_DIR / "viewer-v3.html"))
 
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
