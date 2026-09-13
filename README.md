@@ -38,6 +38,25 @@ LIF simulation compute and animate on the real connectome, including a
 with `uvicorn api.main:app --port 8010` (or via the Browser pane's
 dev-server preview, see `.claude/launch.json` at the repo root).
 
+## Viewer V3 — cinematic laboratory
+
+The default `/fly` route is now the cinematic presentation layer. It keeps
+the same persistent closed-loop simulation introduced by Viewer V2, but
+places the fly inside an authored laboratory desk scene with an in-world
+monitor that renders the actual streamed neural telemetry. Neural events
+direct the camera automatically: sensory activity triggers brain/monitor
+close-ups, DNa02 steering triggers an overhead view, and DNp01 escape
+switches to a chase shot.
+
+Viewer V3 includes a compact neural-replay HUD, laboratory props and
+lighting, an alternate escape-arena scene, bloom with a renderer fallback,
+procedural ambient/neural/wing audio, and a one-click cinematic mode. No
+neural values displayed on the monitor are pre-baked.
+
+- `/fly` — Viewer V3, cinematic laboratory
+- `/fly-v2` — Viewer V2, engineering closed-loop interface
+- `/fly-v1` — original single-run embodied playback
+
 ## Viewer V2 — embodied closed loop
 
 Open `http://localhost:8010/fly` after starting the API. Viewer V2 keeps
