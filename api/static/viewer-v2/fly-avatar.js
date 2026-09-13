@@ -6,7 +6,7 @@
     constructor(scene){
       this.root=new THREE.Group();this.root.name='FlyAvatar';scene.add(this.root);
       this.visual=new THREE.Group();this.visual.scale.setScalar(.46);this.root.add(this.visual);
-      this.legs=[];this.wings=[];this.antennae=[];this.behaviour='idle';this.speed=0;this.elapsed=0;
+      this.legs=[];this.wings=[];this.antennae=[];this.behaviour='idle';this.speed=0;this.elapsed=0;this.groundY=1.05;
       this.materials={
         thorax:new THREE.MeshPhysicalMaterial({color:0x6a3818,roughness:.82,clearcoat:.06}),
         abdomen:new THREE.MeshPhysicalMaterial({color:0x26130a,roughness:.86}),
@@ -85,7 +85,7 @@
     update(dt,time){
       this.elapsed+=dt;
       if(this.targetBody){
-        const scale=.55,target=new THREE.Vector3(this.targetBody.x_cm*scale,1.05+this.targetBody.y_cm*scale,this.targetBody.z_cm*scale);
+        const scale=.55,target=new THREE.Vector3(this.targetBody.x_cm*scale,this.groundY+this.targetBody.y_cm*scale,this.targetBody.z_cm*scale);
         this.root.position.lerp(target,1-Math.pow(.0005,dt));
         const q=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),this.targetBody.heading_rad);
         this.root.quaternion.slerp(q,1-Math.pow(.001,dt));
