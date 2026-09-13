@@ -38,6 +38,25 @@ LIF simulation compute and animate on the real connectome, including a
 with `uvicorn api.main:app --port 8010` (or via the Browser pane's
 dev-server preview, see `.claude/launch.json` at the repo root).
 
+## Viewer V4 — escape chamber experiment
+
+The default `/fly` route is now a persistent, measurable escape challenge.
+The fly starts inside a bounded 3D chamber with solid walls, four obstacles,
+one illuminated exit and a pursuing threat. A trial ends only when the fly
+crosses that opening, is captured, or reaches the configured time limit.
+
+The live display separates three sources of steering: DNa02 connectome
+output, an explicitly engineered geometry/collision reflex, and an optional
+weak exit beacon. This distinction is intentional: the latter two are not
+claimed to emerge from the currently modelled connectome populations. Each
+trial reports elapsed time, path length, route efficiency, collision count
+and threat distance, with a live overhead route map and event-directed camera.
+
+- `/fly` — Viewer V4, bounded escape-chamber experiment
+- `/fly-v3` — Viewer V3, cinematic laboratory
+- `/fly-v2` — Viewer V2, engineering closed-loop interface
+- `/fly-v1` — original single-run embodied playback
+
 ## Viewer V3 — cinematic laboratory
 
 The default `/fly` route is now the cinematic presentation layer. It keeps
@@ -53,13 +72,10 @@ lighting, an alternate escape-arena scene, bloom with a renderer fallback,
 procedural ambient/neural/wing audio, and a one-click cinematic mode. No
 neural values displayed on the monitor are pre-baked.
 
-- `/fly` — Viewer V3, cinematic laboratory
-- `/fly-v2` — Viewer V2, engineering closed-loop interface
-- `/fly-v1` — original single-run embodied playback
 
 ## Viewer V2 — embodied closed loop
 
-Open `http://localhost:8010/fly` after starting the API. Viewer V2 keeps
+Open `http://localhost:8010/fly-v2` after starting the API. Viewer V2 keeps
 membrane voltage, synaptic state, and the transmission-delay buffer alive
 between 25 ms simulation windows. After every window it:
 
